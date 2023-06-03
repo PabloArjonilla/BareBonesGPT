@@ -4,16 +4,19 @@ from torch.nn import functional as F
 from datetime import datetime
 
 # hyperparameters
-batch_size = 32  # how many independent sequences will we process in parallel?
-block_size = 8  # what is the maximum context length for predictions?
+batch_size = 64  # how many independent sequences will we process in parallel?
+block_size = 256  # what is the maximum context length for predictions?
 max_iters = 5000
-eval_interval = 300
-learning_rate = 1e-3
+eval_interval = 500
+learning_rate = 3e-4
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
-n_embd = 32
+n_embd = 384
 # ------------
+n_head = 6
+n_layer = 6
+dropout = 0.2
 time = datetime.now()
 
 torch.manual_seed(1337)
@@ -76,6 +79,8 @@ class Head(nn.Module):
         self.value = nn.Linear(n_embd, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
 
+        self.dropout = nn.Dropout(dropout)
+
     def forward(self, x):
         B, T, C = x.shape
         k = self.key(x)  # (B,T,hs)
@@ -96,6 +101,7 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
         self.proj = nn.Linear(n_embd, n_embd)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
@@ -110,7 +116,8 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd),
             nn.ReLU(),
-            nn.Linear(4 * n_embd, n_embd)
+            nn.Linear(4 * n_embd, n_embd),
+            nn.Dropout(dropout) # You can ad before the residual connection to the residual pathway. Prevents overfitting. Shutting off some subset of neurons to 0 and trains without them. This changes every single forward-backward pass. Effectively training a subset of networks. Eventually, on test time, everything is enabled, and all of those networks work together.
         )
     
     def forward(self, x):
@@ -141,13 +148,8 @@ class BigramLanguageModel(nn.Module):
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
-        self.blocks = nn.Sequential(
-            Block(n_embd, n_head=4), # Because n_embed is 32, when divided by 4 on the block we get a head size of 8
-            Block(n_embd, n_head=4),
-            Block(n_embd, n_head=4),
-        )
-        #self.sa_heads = MultiHeadAttention(4, n_embd//4) # i.e. 4 Heads of 8-dimensional self-attention, 32 channels, same number as the n_embd
-        self.ffwd = FeedForward(n_embd)
+        self.blocks = nn.Sequential(*[Block(n_embd, n_head=n_head) for _ in range(n_layer)])
+        self.ln_f = nn.LayerNorm(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
 
@@ -158,6 +160,7 @@ class BigramLanguageModel(nn.Module):
         pos_emd = self.position_embedding_table(torch.arange(T, device=device))  # (T, C)
         x = tok_embd + pos_emd  # (B,T,C)
         x = self.blocks(x)
+        x = self.ln_f(x)
         logits = self.lm_head(x)  # (B,T,vocab_size)
 
         if targets is None:
