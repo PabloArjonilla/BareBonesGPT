@@ -1,12 +1,13 @@
 import torch # we use PyTorch: https://pytorch.org
+import torch.nn as nn
 from torch.nn import functional as F
 # consider the following toy example:
 
 torch.manual_seed(1337)
-B,T,C = 4,8,2 # batch, time, channels
+B,T,C = 4,8,32 # batch, time, channels
 x = torch.randn(B,T,C)
-x.shape
 
+'''
 # We want x[b,t] = mean_{i<=t} x[b,i]
 xbow = torch.zeros((B,T,C))
 for b in range(B):
@@ -49,3 +50,24 @@ wei = wei.masked_fill(tril == 0, float('-inf'))
 wei = F.softmax(wei, dim=-1)
 xbow3 = wei @ x
 torch.allclose(xbow, xbow3)
+'''
+
+# let's see a single Head perform self-attention
+head_size = 16
+key = nn.Linear(C, head_size, bias=False)
+query = nn.Linear(C, head_size, bias=False)
+value = nn.Linear(C, head_size, bias=False)
+k = key(x) # (B, T, 16)
+q = query(x) # (B, T, 16)
+value
+wei = q @ k.transpose(-2, -1) * head_size**-0.5 # (B, T, 16) @ (B, 16, T) ---> (B, T, T)
+
+tril = torch.tril(torch.ones(T, T))
+wei = wei.masked_fill(tril == 0, float('-inf'))
+wei = F.softmax(wei, dim=-1)
+
+v = value(x)
+
+out = wei @ v
+
+print(wei[0])

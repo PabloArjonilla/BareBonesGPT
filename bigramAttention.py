@@ -6,9 +6,9 @@ from datetime import datetime
 # hyperparameters
 batch_size = 32  # how many independent sequences will we process in parallel?
 block_size = 8  # what is the maximum context length for predictions?
-max_iters = 3000
+max_iters = 5000
 eval_interval = 300
-learning_rate = 1e-2
+learning_rate = 1e-3
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
@@ -66,6 +66,40 @@ def estimate_loss():
     return out
 
 
+class Head(nn.Module):
+    """ one head of self-attention """
+
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+
+    def forward(self, x):
+        B, T, C = x.shape
+        k = self.key(x)  # (B,T,hs)
+        q = self.query(x)  # (B,T,hs)
+        # compute attention scores ("affinities")
+        wei = q @ k.transpose(-2, -1) * C ** -0.5  # (B, T, hs) @ (B, hs, T) -> (B, T, T)
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))  # (B, T, T)
+        wei = F.softmax(wei, dim=-1)  # (B, T, T)
+        # perform the weighted aggregation of the values
+        v = self.value(x)  # (B,T,hs)
+        out = wei @ v  # (B, T, T) @ (B, T, hs) -> (B, T, hs)
+        return out
+
+class MultiHeadAttention(nn.Module):
+    ''' Multiple heads of self-att∂ention in parallel'''
+
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+
+    def forward(self, x):
+        return torch.cat([h(x) for h in self.heads], dim=-1)
+
+
 # super simple bigram model
 class BigramLanguageModel(nn.Module):
 
@@ -74,14 +108,17 @@ class BigramLanguageModel(nn.Module):
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.sa_heads = MultiHeadAttention(4, n_embd//4) # i.e. 4 Heads of 8-dimensional self-attention, 32 channels, same number as the n_embd
         self.lm_head = nn.Linear(n_embd, vocab_size)
+
 
     def forward(self, idx, targets=None):
         B, T = idx.shape
         # idx and targets are both (B,T) tensor of integers
         tok_embd = self.token_embedding_table(idx)  # (B,T,C)
         pos_emd = self.position_embedding_table(torch.arange(T, device=device))  # (T, C)
-        x = tok_embd + pos_emd # (B,T,C)
+        x = tok_embd + pos_emd  # (B,T,C)
+        x = self.sa_heads(x)
         logits = self.lm_head(x)  # (B,T,vocab_size)
 
         if targets is None:
@@ -137,4 +174,4 @@ for iter in range(max_iters):
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
 print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
 
-print(datetime.now() - time)
+#print(datetime.now() - time)
