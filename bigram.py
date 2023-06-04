@@ -4,21 +4,20 @@ from torch.nn import functional as F
 from datetime import datetime
 
 # hyperparameters
-batch_size = 32  # how many independent sequences will we process in parallel?
-block_size = 8  # what is the maximum context length for predictions?
-max_iters = 3000
-eval_interval = 300
-learning_rate = 1e-2
+batch_size = 64  # how many independent sequences will we process in parallel?
+block_size = 32  # what is the maximum context length for predictions?
+max_iters = 5000
+eval_interval = 500
+learning_rate = 1e-3
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
 n_embd = 32
 # ------------
-time = datetime.now()
 
 torch.manual_seed(1337)
-print(device)
 input = 'datasets/shakespeare.txt'
+trainedModelPath = 'trainedModels/basicModel.pt'
 
 # read it in to inspect it
 with open(input, 'r', encoding='utf-8') as f:
@@ -111,30 +110,41 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
         return idx
 
+    def predict(self):
+        # generate from the model
+        context = torch.zeros((1, 1), dtype=torch.long, device=device)
+        print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+
+
 model = BigramLanguageModel()
 m = model.to(device)
 
-# create a PyTorch optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+def train():
+    # create a PyTorch optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-for iter in range(max_iters):
+    for iter in range(max_iters):
 
-    # every once in a while evaluate the loss on train and val sets
-    if iter % eval_interval == 0:
-        losses = estimate_loss()
-        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        # every once in a while evaluate the loss on train and val sets
+        if iter % eval_interval == 0:
+            losses = estimate_loss()
+            print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
 
-    # sample a batch of data
-    xb, yb = get_batch('train')
+        # sample a batch of data
+        xb, yb = get_batch('train')
 
-    # evaluate the loss
-    logits, loss = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+        # evaluate the loss
+        logits, loss = model(xb, yb)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+    
+    torch.save(model.state_dict(), trainedModelPath)
 
-# generate from the model
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+def loadModel(path):
+    model.load_state_dict(torch.load(path))
+    model.eval()
 
-print(datetime.now() - time)
+#train()
+#loadModel(trainedModelPath)
+#model.predict()
