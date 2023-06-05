@@ -4,15 +4,15 @@ from torch.nn import functional as F
 from datetime import datetime
 
 # hyperparameters
-batch_size = 64  # how many independent sequences will we process in parallel?
-block_size = 256  # what is the maximum context length for predictions?
+batch_size = 32  # how many independent sequences will we process in parallel?
+block_size = 128  # what is the maximum context length for predictions?
 max_iters = 5000
 eval_interval = 500
-learning_rate = 3e-4
+learning_rate = 2e-3
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
-n_embd = 384
+n_embd = 192
 n_head = 6
 n_layer = 6
 dropout = 0.2
@@ -20,8 +20,8 @@ time = datetime.now()
 
 torch.manual_seed(1337)
 print(device)
-input = 'datasets/reggaeton.txt'
-trainedModelPath = 'trainedModels/AttentionModelRegueton.pt'
+input = 'datasets/shakespeare.txt'
+trainedModelPath = 'trainedModels/AttentionModelDownscaled.pt'
 
 # read it in to inspect it
 with open(input, 'r', encoding='utf-8') as f:
@@ -228,8 +228,8 @@ def loadModel(path):
     model.load_state_dict(torch.load(path))
     model.eval()
 
-#train()
-loadModel(trainedModelPath)
+train()
+#loadModel(trainedModelPath)
 model.predict()
 
 
