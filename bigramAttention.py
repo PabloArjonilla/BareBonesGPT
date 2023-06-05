@@ -13,7 +13,6 @@ learning_rate = 3e-4
 device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
 n_embd = 384
-# ------------
 n_head = 6
 n_layer = 6
 dropout = 0.2
@@ -21,8 +20,8 @@ time = datetime.now()
 
 torch.manual_seed(1337)
 print(device)
-input = 'datasets/shakespeare.txt'
-trainedModelPath = 'trainedModels/AttentionModel.pt'
+input = 'datasets/reggaeton.txt'
+trainedModelPath = 'trainedModels/AttentionModelRegueton.pt'
 
 # read it in to inspect it
 with open(input, 'r', encoding='utf-8') as f:
@@ -193,6 +192,7 @@ class BigramLanguageModel(nn.Module):
     
     def predict(self):
         # generate from the model
+        encode
         context = torch.zeros((1, 1), dtype=torch.long, device=device)
         print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
 
@@ -202,6 +202,8 @@ m = model.to(device)
 def train():
     # create a PyTorch optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+    time = datetime.now()
 
     for iter in range(max_iters):
 
@@ -218,16 +220,20 @@ def train():
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-    
+
+    print(datetime.now() - time)
     torch.save(model.state_dict(), trainedModelPath)
 
 def loadModel(path):
     model.load_state_dict(torch.load(path))
     model.eval()
 
-train()
-#loadModel(trainedModelPath)
-#model.predict()
+#train()
+loadModel(trainedModelPath)
+model.predict()
 
 
 # Note: when implementing the first simple transformer, with a multi head attention and a FFWD, we start to get a very deep neural network, and starts to suffer form optimization issues.
+# Tarda 15 mins en una Nvidia A100
+# 3:04:58.928093
+# TODO Tokenizador, meter contexto, graficas, optimizar entrenamiento, meter la otra mitad del modelo.

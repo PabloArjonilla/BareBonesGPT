@@ -123,6 +123,8 @@ def train():
     # create a PyTorch optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+    time = datetime.now()
+
     for iter in range(max_iters):
 
         # every once in a while evaluate the loss on train and val sets
@@ -139,6 +141,7 @@ def train():
         loss.backward()
         optimizer.step()
     
+    print(datetime.now() - time)
     torch.save(model.state_dict(), trainedModelPath)
 
 def loadModel(path):
@@ -146,5 +149,5 @@ def loadModel(path):
     model.eval()
 
 #train()
-#loadModel(trainedModelPath)
-#model.predict()
+loadModel(trainedModelPath)
+model.predict("My lord of the great ")
